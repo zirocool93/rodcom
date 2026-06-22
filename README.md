@@ -24,6 +24,29 @@ bash deploy/scripts/install.sh
 
 После запуска приложение будет доступно через Nginx на порту `80`.
 
+## Автоматическая установка или обновление с GitHub
+
+На чистом Ubuntu 24.04 сервере можно запустить один standalone-скрипт:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scripts/server.sh | sudo bash
+```
+
+Повторный запуск этой же команды обновит проект из ветки `main`, пересоберет контейнеры, применит миграции и проверит `/api/v1/health`.
+
+Дополнительные варианты:
+
+```bash
+# Установить или обновить в другой каталог
+curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scripts/server.sh | sudo env APP_DIR=/srv/rodcom bash
+
+# Обновить без backup перед обновлением
+curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scripts/server.sh | sudo env BACKUP_BEFORE_UPDATE=false bash -s -- update
+
+# Показать состояние сервисов
+sudo APP_DIR=/opt/rodcom bash /opt/rodcom/deploy/scripts/server.sh status
+```
+
 ## Локальный запуск через Docker Compose
 
 ```bash

@@ -34,6 +34,8 @@ curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scrip
 
 Повторный запуск этой же команды обновит проект из ветки `main`, пересоберет контейнеры, применит миграции и проверит `/api/v1/health`.
 
+При первичной установке скрипт запросит логин и пароль администратора. После завершения он выведет адрес панели и Django admin.
+
 Дополнительные варианты:
 
 ```bash
@@ -42,6 +44,12 @@ curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scrip
 
 # Обновить без backup перед обновлением
 curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scripts/server.sh | sudo env BACKUP_BEFORE_UPDATE=false bash -s -- update
+
+# Передать администратора без интерактивного ввода
+curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scripts/server.sh | sudo env ADMIN_LOGIN=admin ADMIN_PASSWORD='change-this-password' bash
+
+# Принудительно обновить пароль администратора на существующей установке
+curl -fsSL https://raw.githubusercontent.com/zirocool93/rodcom/main/deploy/scripts/server.sh | sudo env FORCE_ADMIN_SETUP=true bash -s -- update
 
 # Показать состояние сервисов
 sudo APP_DIR=/opt/rodcom bash /opt/rodcom/deploy/scripts/server.sh status

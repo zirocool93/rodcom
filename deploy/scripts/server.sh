@@ -5,6 +5,7 @@ REPO_URL="${REPO_URL:-https://github.com/zirocool93/rodcom.git}"
 BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/rodcom}"
 BACKUP_BEFORE_UPDATE="${BACKUP_BEFORE_UPDATE:-true}"
+FORCE_ADMIN_SETUP="${FORCE_ADMIN_SETUP:-false}"
 ACTION="${1:-auto}"
 
 log() {
@@ -78,6 +79,65 @@ ensure_env() {
   fi
 }
 
+read_secret_from_tty() {
+  local prompt="$1"
+  local value
+
+  if [ ! -r /dev/tty ]; then
+    fail "нет интерактивного терминала для ввода '${prompt}'. Передайте ADMIN_LOGIN и ADMIN_PASSWORD через переменные окружения"
+  fi
+
+  printf "%s" "$prompt" > /dev/tty
+  stty -echo < /dev/tty
+  IFS= read -r value < /dev/tty
+  stty echo < /dev/tty
+  printf '\n' > /dev/tty
+  printf '%s' "$value"
+}
+
+read_line_from_tty() {
+  local prompt="$1"
+  local value
+
+  if [ ! -r /dev/tty ]; then
+    fail "нет интерактивного терминала для ввода '${prompt}'. Передайте ADMIN_LOGIN и ADMIN_PASSWORD через переменные окружения"
+  fi
+
+  printf "%s" "$prompt" > /dev/tty
+  IFS= read -r value < /dev/tty
+  printf '%s' "$value"
+}
+
+setup_initial_admin() {
+  cd "$APP_DIR"
+
+  local admin_login="${ADMIN_LOGIN:-}"
+  local admin_password="${ADMIN_PASSWORD:-}"
+  local admin_password_repeat
+
+  if [ -z "$admin_login" ]; then
+    admin_login="$(read_line_from_tty "Введите логин администратора: ")"
+  fi
+
+  if [ -z "$admin_password" ]; then
+    admin_password="$(read_secret_from_tty "Введите пароль администратора: ")"
+    admin_password_repeat="$(read_secret_from_tty "Повторите пароль администратора: ")"
+    if [ "$admin_password" != "$admin_password_repeat" ]; then
+      fail "пароли администратора не совпадают"
+    fi
+  fi
+
+  if [ -z "$admin_login" ] || [ -z "$admin_password" ]; then
+    fail "логин и пароль администратора обязательны"
+  fi
+
+  log "Создаю или обновляю первоначального администратора."
+  docker compose exec -T \
+    -e ADMIN_LOGIN="$admin_login" \
+    -e ADMIN_PASSWORD="$admin_password" \
+    backend sh -c 'python manage.py ensure_initial_admin --login "$ADMIN_LOGIN" --password "$ADMIN_PASSWORD"'
+}
+
 run_backup_if_needed() {
   cd "$APP_DIR"
 
@@ -115,6 +175,30 @@ deploy_stack() {
   curl -fsS http://localhost/api/v1/health >/dev/null
 }
 
+detect_panel_url() {
+  if [ -n "${PUBLIC_URL:-}" ]; then
+    printf '%s' "$PUBLIC_URL"
+    return
+  fi
+
+  local ip
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  if [ -n "$ip" ]; then
+    printf 'http://%s' "$ip"
+    return
+  fi
+
+  printf 'http://localhost'
+}
+
+print_access_info() {
+  local panel_url
+  panel_url="$(detect_panel_url)"
+
+  printf '\n[rodcom] Панель доступна по адресу: %s\n' "$panel_url"
+  printf '[rodcom] Django admin доступен по адресу: %s/admin/\n' "$panel_url"
+}
+
 show_status() {
   cd "$APP_DIR"
   docker compose ps
@@ -126,6 +210,11 @@ main() {
 
   case "$ACTION" in
     auto|install|update)
+      local fresh_install="false"
+      if [ ! -d "$APP_DIR/.git" ]; then
+        fresh_install="true"
+      fi
+
       install_docker
       if [ -d "$APP_DIR/.git" ] && [ "$ACTION" != "install" ]; then
         run_backup_if_needed
@@ -133,7 +222,11 @@ main() {
       clone_or_update_repo
       ensure_env
       deploy_stack
+      if [ "$fresh_install" = "true" ] || [ "$FORCE_ADMIN_SETUP" = "true" ]; then
+        setup_initial_admin
+      fi
       show_status
+      print_access_info
       log "Готово. RodCom установлен или обновлен из GitHub."
       ;;
     status)
